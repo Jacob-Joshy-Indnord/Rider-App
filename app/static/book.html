@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book a shuttle seat</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 28rem; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-top: 1rem; font-weight: 600; }
+    select { width: 100%; padding: .6rem; font-size: 1rem; margin-top: .3rem; }
+    #summary { margin-top: 1.5rem; padding: .8rem; background: #f2f4f7; border-radius: .4rem; }
+    #error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Book a shuttle seat</h1>
+  <p id="error" role="alert" hidden></p>
+
+  <label for="route">Route</label>
+  <select id="route" name="route"></select>
+
+  <label for="departure">Departure today</label>
+  <select id="departure" name="departure" disabled></select>
+
+  <label for="stop">Boarding stop</label>
+  <select id="stop" name="stop" disabled></select>
+
+  <p id="summary" hidden></p>
+
+  <script>
+    const DEPARTURES_URL = "/api/departures/today";
+    const $ = (id) => document.getElementById(id);
+    let routes = [];
+
+    function fill(select, items, placeholder) {
+      select.replaceChildren(new Option(placeholder, ""));
+      for (const [value, label] of items) select.add(new Option(label, value));
+      select.disabled = items.length === 0;
+    }
+
+    function timeOf(iso) {
+      return iso.slice(11, 16); // HH:MM in the service timezone
+    }
+
+    function selectedRoute() {
+      return routes.find((r) => r.id === $("route").value);
+    }
+
+    function onRouteChange() {
+      const route = selectedRoute();
+      fill($("departure"), route ? route.departures.map((d) =>
+        [d.id, `${timeOf(d.scheduled_at)} · ${d.shuttle.name} (${d.shuttle.seat_count} seats)`]) : [],
+        "Choose a departure");
+      fill($("stop"), route ? route.stops.filter((s) => s.boardable).map((s) => [s.id, s.name]) : [],
+        "Choose a stop");
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const route = selectedRoute();
+      const dep = route && route.departures.find((d) => d.id === $("departure").value);
+      const stop = route && route.stops.find((s) => s.id === $("stop").value);
+      const summary = $("summary");
+      summary.hidden = !(route && dep && stop);
+      if (!summary.hidden) {
+        summary.textContent = `${route.name}, departing ${timeOf(dep.scheduled_at)}, boarding at ${stop.name}.`;
+      }
+    }
+
+    async function load() {
+      try {
+        const response = await fetch(DEPARTURES_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        routes = (await response.json()).routes;
+        fill($("route"), routes.map((r) => [r.id, r.name]), "Choose a route");
+      } catch (err) {
+        $("error").textContent = "Could not load today's departures. Please try again.";
+        $("error").hidden = false;
+      }
+    }
+
+    $("route").addEventListener("change", onRouteChange);
+    $("departure").addEventListener("change", updateSummary);
+    $("stop").addEventListener("change", updateSummary);
+    load();
+  </script>
+</body>
+</html>
