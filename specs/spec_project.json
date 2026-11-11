@@ -1,0 +1,1056 @@
+{
+  "id": "proj-b0a8iYLpYQk",
+  "organization_project_id": "79a8a6e0-9a21-48d5-bc77-c8321c9736f7",
+  "name": "Rider App Workflow",
+  "code": "RAW",
+  "story_code_seq": 10,
+  "tech_stack": "Push notifications: Firebase Cloud Messaging (FCM) for Android and iOS (iOS via FCM's APNs integration)",
+  "design": "# Rider App Workflow — Design\n\n## Tech Stack\nPush notifications: Firebase Cloud Messaging (FCM) for Android and iOS (iOS via FCM's APNs integration)\n\n## Architecture\n_High-level components, their responsibilities, and how they interact._\n\n## Key Decisions\n_Significant technical decisions and trade-offs (with alternatives considered)._\n\n## Data Model\n_Main entities/tables and their relationships._\n\n## Open Questions\n_Anything unresolved to decide before or during the build._\n",
+  "brd": {
+    "id": "brd-KHO3nvmNAY0",
+    "source_type": "text",
+    "filename": null,
+    "raw_text": "# Business Requirements Document — Rider App (trip booking and live tracking)\n\nProject: **Rider App** (code RID) · Team: Mobile · Department: Engineering\nScope of this BRD: the **book-a-trip and track-the-driver** flow. Rider\nsign-up, payment methods and ratings exist already and are out of scope.\n\n## Overview\nIndnord runs a small employee shuttle fleet between the two office campuses\nand the metro station. Riders currently phone a dispatcher. The Rider App\nlets an employee request a seat on the next shuttle, see where it is, and\nget notified when it is two minutes away.\n\n## Goals\n- Booking a seat takes three taps.\n- A rider always knows whether they have a seat and when to be at the stop.\n- No shuttle leaves with more riders than seats.\n\n## Users\n- **Rider**: books and cancels seats, tracks the assigned shuttle.\n- **Driver** (driver app, separate): accepts the manifest, starts and ends\n  the trip; shares location automatically.\n- **Dispatcher**: views all trips and can cancel a shuttle run.\n\n## Functional requirements\n\n1. **Stops and routes**\n   - The app shows the fixed routes (campus A to metro, campus B to metro and\n     the reverse) with their stops and the scheduled departures for today.\n   - Each departure has a shuttle with a fixed seat count.\n\n2. **Booking**\n   - A rider picks a route, a departure and a boarding stop and books one\n     seat. A booking is **Confirmed** when a seat is free; otherwise the\n     rider joins the **Waitlist** in order.\n   - A rider may hold at most two future bookings and never two on the same\n     departure.\n   - A rider can cancel until five minutes before the scheduled departure.\n     Cancelling a confirmed seat promotes the first waitlisted rider and\n     notifies them.\n   - Bookings close at departure time; the manifest is then frozen.\n\n3. **Live tracking**\n   - From 15 minutes before departure the rider sees the shuttle position on\n     a map, refreshed at least every 10 seconds, and an estimated arrival at\n     their boarding stop.\n   - The rider receives a push notification when the shuttle is two minutes\n     from their stop.\n   - If the driver has not started the trip five minutes after the scheduled\n     departure, the rider sees a \"delayed\" banner.\n\n4. **Boarding**\n   - The driver's manifest lists confirmed riders per stop; tapping a rider\n     marks them boarded.\n   - A confirmed rider not boarded by the time the shuttle leaves their stop\n     is marked **No-show**. Three no-shows in 30 days moves the rider to\n     waitlist-only for the next 7 days.\n\n5. **Dispatcher**\n   - The dispatcher can cancel a departure; every confirmed and waitlisted\n     rider is notified and their booking is cancelled.\n\n## Non-functional requirements\n- Works on Android 10+ and iOS 15+; offline shows the last known booking\n  state with a stale marker.\n- Location updates from the driver app are stored for 24 hours only.\n- Booking under concurrent taps never over-allocates seats.\n\n## Out of scope\n- Route planning and new routes.\n- Fare or payment (the shuttle is free).\n- Driver onboarding.\n\n## Acceptance criteria\n- On a 12-seat departure, the 13th booking lands on the waitlist; a\n  cancellation promotes it and sends a notification.\n- A rider with two future bookings gets a clear error on a third.\n- The two-minute notification fires exactly once per rider per trip.\n- Three no-shows in a month restrict the rider to waitlist for a week.",
+    "original_length": 3417,
+    "truncated": false,
+    "created_at": "2026-10-28T21:04:22.641754Z"
+  },
+  "technical_docs": {},
+  "epics": [
+    {
+      "id": "epic-f8XsrHVc81Q",
+      "project_id": "proj-b0a8iYLpYQk",
+      "title": "Routes and Departures",
+      "description": "Show fixed routes, stops and today's scheduled departures with seat counts.",
+      "user_stories": [
+        {
+          "id": "story-irV4VLH_6jI",
+          "epic_id": "epic-f8XsrHVc81Q",
+          "code_number": 1,
+          "title": "Browse routes and departures",
+          "narrative": "As a rider, I want to see routes, stops and today's departures, so that I can choose a shuttle to book",
+          "specs": [
+            {
+              "id": "spec-HC3_tczIe6o",
+              "story_id": "story-irV4VLH_6jI",
+              "title": "Route and departure data",
+              "description": "Read-only API and data model for fixed routes, stops, departures and per-departure seat capacity.",
+              "tasks": [
+                {
+                  "id": "task-J685C8F43p0",
+                  "spec_id": "spec-HC3_tczIe6o",
+                  "title": "Route and departure model",
+                  "description": "Define routes (campus A/metro, campus B/metro, both directions), ordered stops, departures with shuttle and fixed seat count. Routes, stops and schedules are loaded from seeded fixed data (no admin UI or import); route planning is out of scope.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac--d2OwM6qfBs",
+                      "text": "Departure has seat count",
+                      "given": null,
+                      "when": "A departure is loaded",
+                      "then": "It has a shuttle, route, scheduled time and fixed seat count",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-RtSeedData1",
+                      "text": "Seeded fixed data",
+                      "given": "The system is started against an empty database",
+                      "when": "The seed data is applied",
+                      "then": "The campus A/metro and campus B/metro routes in both directions, their ordered stops and scheduled departures exist, and re-applying the seed does not create duplicates",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [],
+                  "code_refs": [
+                    "app/__init__.py",
+                    "app/config.py",
+                    "app/db.py",
+                    "app/seed.py",
+                    "app/repository.py",
+                    "tests/__init__.py",
+                    "tests/test_model_seed.py"
+                  ],
+                  "estimate": null,
+                  "status": "done",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": "Decision: routes, stops and schedules are loaded from idempotent seeded fixed data; no admin UI or import (route planning out of scope). Recorded in design.md.",
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-hqaGeE8MFuI",
+                  "spec_id": "spec-HC3_tczIe6o",
+                  "title": "Today's departures API",
+                  "description": "Endpoint returning routes, stops and today's scheduled departures.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-ODDHWrfSmmc",
+                      "text": "Only today's departures",
+                      "given": null,
+                      "when": "The client requests departures",
+                      "then": "Only today's departures with their stops are returned",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-J685C8F43p0"
+                  ],
+                  "code_refs": [
+                    "app/main.py",
+                    "app/schemas.py",
+                    "requirements.txt",
+                    "tests/test_departures_api.py"
+                  ],
+                  "estimate": null,
+                  "status": "done",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "done",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            },
+            {
+              "id": "spec-RKRdEbM9m4s",
+              "story_id": "story-irV4VLH_6jI",
+              "title": "Routes screen",
+              "description": "Mobile UI listing routes, stops and departures.",
+              "tasks": [
+                {
+                  "id": "task-iJKwBNilIIc",
+                  "spec_id": "spec-RKRdEbM9m4s",
+                  "title": "Routes and departures UI",
+                  "description": "Screen showing routes, stops and today's departures.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-qmftCKCvmKA",
+                      "text": "Routes displayed",
+                      "given": null,
+                      "when": "Rider opens the app",
+                      "then": "All four route directions with stops and today's departures are shown",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-hqaGeE8MFuI"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        }
+      ],
+      "status": "approved",
+      "included": true,
+      "confidence": "confident",
+      "confidence_note": null,
+      "confidence_options": []
+    },
+    {
+      "id": "epic-5MQLhMjWRUA",
+      "project_id": "proj-b0a8iYLpYQk",
+      "title": "Booking and Waitlist",
+      "description": "Book, cancel and waitlist seats with limits, promotion and concurrency safety.",
+      "user_stories": [
+        {
+          "id": "story-sE6rau3upCQ",
+          "epic_id": "epic-5MQLhMjWRUA",
+          "code_number": 2,
+          "title": "Book a seat",
+          "narrative": "As a rider, I want to book a seat on a departure at my boarding stop, so that I know I have a seat",
+          "specs": [
+            {
+              "id": "spec-NH4wkVmykgI",
+              "story_id": "story-sE6rau3upCQ",
+              "title": "Booking and waitlist allocation",
+              "description": "Atomic seat allocation: Confirmed if a seat is free, otherwise ordered Waitlist; enforce booking limits.",
+              "tasks": [
+                {
+                  "id": "task-_EgPLGFv03o",
+                  "spec_id": "spec-NH4wkVmykgI",
+                  "title": "Atomic seat allocation",
+                  "description": "Create booking as Confirmed or Waitlisted in order, using transactional/locked allocation so concurrent requests never over-allocate.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-kgvyFUW5g0w",
+                      "text": "13th booking waitlisted",
+                      "given": null,
+                      "when": "A 13th rider books a full 12-seat departure",
+                      "then": "The booking is Waitlisted in order",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-UpjfhBi3BHA",
+                      "text": "No over-allocation",
+                      "given": null,
+                      "when": "Many riders book the last seat concurrently",
+                      "then": "Exactly one is Confirmed and others are Waitlisted",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "needs a look",
+                  "confidence_note": "BRD states the outcome only; locking mechanism (row lock, serializable txn, queue) is an assumption.",
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-6kUEjuPLN_M",
+                  "spec_id": "spec-NH4wkVmykgI",
+                  "title": "Booking limits validation",
+                  "description": "Reject a booking if rider has two future bookings or already has one on the same departure; reject after departure time.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-uR6t79aEvVQ",
+                      "text": "Third booking rejected",
+                      "given": null,
+                      "when": "A rider with two future bookings books a third",
+                      "then": "A clear error is returned and no booking is created",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-uhOCZIp16Kw",
+                      "text": "Duplicate departure rejected",
+                      "given": null,
+                      "when": "A rider books a departure they already hold",
+                      "then": "The booking is rejected with an error",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-37yo7O6srK4",
+                      "text": "Closed at departure",
+                      "given": null,
+                      "when": "A booking is attempted at or after departure time",
+                      "then": "It is rejected",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-_EgPLGFv03o"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "needs a look",
+                  "confidence_note": "Assumed waitlisted bookings count toward the two-booking limit and that cancelled ones do not.",
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-2SPD3Pv36ls",
+                  "spec_id": "spec-NH4wkVmykgI",
+                  "title": "Booking flow UI",
+                  "description": "Three-tap flow: route, departure, boarding stop, showing Confirmed or Waitlist status.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-dh7GxdaxL2Y",
+                      "text": "Three-tap booking",
+                      "given": null,
+                      "when": "Rider books from the departures list",
+                      "then": "Booking completes in three taps and status is displayed",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-6kUEjuPLN_M",
+                    "task-iJKwBNilIIc"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "needs a look",
+                  "confidence_note": "'Three taps' interpreted as select departure, select stop, confirm.",
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        },
+        {
+          "id": "story-wrpJTDw8YBM",
+          "epic_id": "epic-5MQLhMjWRUA",
+          "code_number": 3,
+          "title": "Cancel and promotion",
+          "narrative": "As a rider, I want to cancel my booking, so that my seat can go to someone else",
+          "specs": [
+            {
+              "id": "spec-5B4Ig9-3BfA",
+              "story_id": "story-wrpJTDw8YBM",
+              "title": "Cancellation and waitlist promotion",
+              "description": "Cancellation allowed until 5 minutes before departure; confirmed cancellation promotes first waitlisted rider.",
+              "tasks": [
+                {
+                  "id": "task-xu3vn4ssj2o",
+                  "spec_id": "spec-5B4Ig9-3BfA",
+                  "title": "Cancel booking",
+                  "description": "Cancel endpoint enforcing the 5-minute cutoff.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-bFkLDhC9mXw",
+                      "text": "Cancel before cutoff",
+                      "given": null,
+                      "when": "Rider cancels more than 5 minutes before departure",
+                      "then": "Booking is cancelled",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-5L2pSwtsO90",
+                      "text": "Cancel after cutoff",
+                      "given": null,
+                      "when": "Rider cancels within 5 minutes of departure",
+                      "then": "Cancellation is rejected",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-_EgPLGFv03o"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-o8U9lZr0s14",
+                  "spec_id": "spec-5B4Ig9-3BfA",
+                  "title": "Promote waitlisted rider",
+                  "description": "On confirmed cancellation promote first waitlisted rider to Confirmed and send a notification.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-R0oJrlCEuc4",
+                      "text": "Promotion and notice",
+                      "given": null,
+                      "when": "A confirmed seat on a full departure is cancelled",
+                      "then": "First waitlisted rider becomes Confirmed and receives a notification",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-xu3vn4ssj2o",
+                    "task-C46UInrJlEw"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        },
+        {
+          "id": "story-JXd3tDQ9UJA",
+          "epic_id": "epic-5MQLhMjWRUA",
+          "code_number": 4,
+          "title": "Manifest freeze",
+          "narrative": "As a driver, I want a frozen manifest at departure, so that no shuttle leaves over capacity",
+          "specs": [
+            {
+              "id": "spec-paWYjbUfZWY",
+              "story_id": "story-JXd3tDQ9UJA",
+              "title": "Booking close at departure",
+              "description": "Freeze manifest at scheduled departure time.",
+              "tasks": [
+                {
+                  "id": "task-FtNoIhkr9AY",
+                  "spec_id": "spec-paWYjbUfZWY",
+                  "title": "Freeze manifest",
+                  "description": "At departure time block booking, cancellation and promotion changes.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-Q5S-ray880E",
+                      "text": "Manifest frozen",
+                      "given": null,
+                      "when": "Scheduled departure time passes",
+                      "then": "No bookings or promotions change the manifest",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-xu3vn4ssj2o"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "needs a look",
+                  "confidence_note": "Assumed waitlist is not promoted after freeze.",
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "needs a look",
+              "confidence_note": "Assumed freeze is by scheduled time, not actual trip start.",
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        }
+      ],
+      "status": "approved",
+      "included": true,
+      "confidence": "confident",
+      "confidence_note": null,
+      "confidence_options": []
+    },
+    {
+      "id": "epic-euAhje_5YqM",
+      "project_id": "proj-b0a8iYLpYQk",
+      "title": "Live Tracking and Notifications",
+      "description": "Map tracking, ETA, two-minute push alert and delayed banner.",
+      "user_stories": [
+        {
+          "id": "story-yaSwCIl0-cY",
+          "epic_id": "epic-euAhje_5YqM",
+          "code_number": 5,
+          "title": "Track the shuttle",
+          "narrative": "As a rider, I want to see the shuttle on a map with an ETA, so that I know when to be at the stop",
+          "specs": [
+            {
+              "id": "spec-8pEBmG6abOI",
+              "story_id": "story-yaSwCIl0-cY",
+              "title": "Location ingestion and ETA",
+              "description": "Receive driver location, compute ETA to each boarding stop, and serve it to riders.",
+              "tasks": [
+                {
+                  "id": "task-fxgXfmffxRI",
+                  "spec_id": "spec-8pEBmG6abOI",
+                  "title": "Driver location ingestion",
+                  "description": "Accept location updates from the driver app, stored for 24 hours only. The driver app is built separately; this backend owns the contract: an authenticated POST carrying trip id, latitude, longitude and device timestamp.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-pAeVFKsSxb4",
+                      "text": "Location stored",
+                      "given": null,
+                      "when": "Driver app posts a location",
+                      "then": "It is stored against the trip",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-DrvLocCntr1",
+                      "text": "Location contract enforced",
+                      "given": "The driver app is a separate client",
+                      "when": "A location post is missing the trip id, latitude, longitude or timestamp, is out of range, or is unauthenticated",
+                      "then": "It is rejected with an error and nothing is stored",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-JaYtsR5BOX0",
+                      "text": "24h retention",
+                      "given": null,
+                      "when": "A location record is older than 24 hours",
+                      "then": "It is deleted",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": "Contract defined by this backend (authenticated POST: trip id, lat, lng, device timestamp); driver app team to conform. Recorded in design.md.",
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-8GF2hynrI5U",
+                  "spec_id": "spec-8pEBmG6abOI",
+                  "title": "ETA calculation",
+                  "description": "Estimate arrival at each boarding stop from latest location.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-ruim8JIrbM8",
+                      "text": "ETA available",
+                      "given": null,
+                      "when": "A location update arrives",
+                      "then": "ETA for each upcoming stop is recalculated",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-fxgXfmffxRI"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "needs a look",
+                  "confidence_note": "BRD gives no ETA method; assumed routing/distance-based estimate.",
+                  "confidence_options": []
+                },
+                {
+                  "id": "task--odS26YIDr0",
+                  "spec_id": "spec-8pEBmG6abOI",
+                  "title": "Tracking map UI",
+                  "description": "Show map and ETA from 15 minutes before departure, refreshed at least every 10 seconds.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-95kKGSOgL0A",
+                      "text": "Visible from T-15",
+                      "given": null,
+                      "when": "Current time is 15 minutes before departure",
+                      "then": "Map with shuttle position and ETA to rider's stop is shown",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-TGoHmt64MCM",
+                      "text": "10s refresh",
+                      "given": null,
+                      "when": "Tracking screen is open",
+                      "then": "Position refreshes at least every 10 seconds",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-8GF2hynrI5U"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        },
+        {
+          "id": "story-82zAC1YDjnk",
+          "epic_id": "epic-euAhje_5YqM",
+          "code_number": 6,
+          "title": "Arrival and delay alerts",
+          "narrative": "As a rider, I want alerts when the shuttle is near or late, so that I'm at the stop on time",
+          "specs": [
+            {
+              "id": "spec-w94JYwXeVlY",
+              "story_id": "story-82zAC1YDjnk",
+              "title": "Notifications",
+              "description": "Push delivery, two-minute alert once per rider per trip, and delayed banner.",
+              "tasks": [
+                {
+                  "id": "task-C46UInrJlEw",
+                  "spec_id": "spec-w94JYwXeVlY",
+                  "title": "Push notification service",
+                  "description": "Send push notifications to riders on Android and iOS via Firebase Cloud Messaging (FCM) for both platforms.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-Z_Aa5vaQZEQ",
+                      "text": "Push delivered",
+                      "given": null,
+                      "when": "A notification is sent to a rider",
+                      "then": "It is delivered to their device via FCM (Android and iOS)",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-MYw67njcUZ0",
+                  "spec_id": "spec-w94JYwXeVlY",
+                  "title": "Two-minute alert",
+                  "description": "Notify rider when shuttle is two minutes from their stop, deduplicated per rider per trip.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-MOk5TniaVXE",
+                      "text": "Fires once",
+                      "given": null,
+                      "when": "Shuttle ETA to rider's stop drops to two minutes, repeatedly",
+                      "then": "Exactly one push is sent per rider per trip",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-8GF2hynrI5U",
+                    "task-C46UInrJlEw"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-iJgwYwZZtG8",
+                  "spec_id": "spec-w94JYwXeVlY",
+                  "title": "Delayed banner",
+                  "description": "Show 'delayed' banner if driver has not started trip five minutes after scheduled departure.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-y9B51BNZnvs",
+                      "text": "Banner shown",
+                      "given": null,
+                      "when": "Five minutes pass after scheduled departure without trip start",
+                      "then": "Rider sees a delayed banner",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        }
+      ],
+      "status": "approved",
+      "included": true,
+      "confidence": "confident",
+      "confidence_note": null,
+      "confidence_options": []
+    },
+    {
+      "id": "epic-g74V-eE9Dcs",
+      "project_id": "proj-b0a8iYLpYQk",
+      "title": "Boarding and No-shows",
+      "description": "Driver manifest boarding and no-show restrictions.",
+      "user_stories": [
+        {
+          "id": "story-Y-bWjl_tXWA",
+          "epic_id": "epic-g74V-eE9Dcs",
+          "code_number": 7,
+          "title": "Mark riders boarded",
+          "narrative": "As a driver, I want a manifest per stop where I can mark riders boarded, so that I know who is on board",
+          "specs": [
+            {
+              "id": "spec-AgsxmvuBxOI",
+              "story_id": "story-Y-bWjl_tXWA",
+              "title": "Manifest API",
+              "description": "Backend endpoints serving the manifest and recording boarding for the driver app.",
+              "tasks": [
+                {
+                  "id": "task-oClL_RGRTWA",
+                  "spec_id": "spec-AgsxmvuBxOI",
+                  "title": "Manifest and boarding endpoints",
+                  "description": "List confirmed riders per stop; mark a rider boarded.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-ejACXS5GMZI",
+                      "text": "Manifest per stop",
+                      "given": null,
+                      "when": "Driver requests the manifest",
+                      "then": "Confirmed riders are listed grouped by stop",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-v8NM78NgwiU",
+                      "text": "Mark boarded",
+                      "given": null,
+                      "when": "Driver taps a rider",
+                      "then": "Rider is marked boarded",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-FtNoIhkr9AY"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "needs a look",
+              "confidence_note": "Driver app is separate; assumed this app's backend exposes the endpoints.",
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        },
+        {
+          "id": "story-HuEvajS7zy0",
+          "epic_id": "epic-g74V-eE9Dcs",
+          "code_number": 8,
+          "title": "No-show handling",
+          "narrative": "As a dispatcher, I want repeat no-shows restricted, so that seats are not wasted",
+          "specs": [
+            {
+              "id": "spec-PWtwa-ihJUY",
+              "story_id": "story-HuEvajS7zy0",
+              "title": "No-show tracking and restriction",
+              "description": "Mark no-shows when shuttle leaves a stop and apply waitlist-only restriction.",
+              "tasks": [
+                {
+                  "id": "task-0S3Ms_MrIf0",
+                  "spec_id": "spec-PWtwa-ihJUY",
+                  "title": "Mark no-shows",
+                  "description": "Mark confirmed unboarded riders No-show when shuttle leaves their stop.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-Oz6U820h5KQ",
+                      "text": "No-show recorded",
+                      "given": null,
+                      "when": "Shuttle leaves a stop and a confirmed rider is not boarded",
+                      "then": "Rider is marked No-show",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-oClL_RGRTWA"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "needs a look",
+                  "confidence_note": "'Leaves their stop' assumed detected from driver location or driver action.",
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-pK-tQ3Dml9U",
+                  "spec_id": "spec-PWtwa-ihJUY",
+                  "title": "Waitlist-only restriction",
+                  "description": "After three no-shows in 30 days, force new bookings to Waitlist for 7 days.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-Q8ucvJYlI8I",
+                      "text": "Restriction applied",
+                      "given": null,
+                      "when": "Rider's third no-show within 30 days is recorded",
+                      "then": "Their bookings for the next 7 days are Waitlist only",
+                      "met": false
+                    },
+                    {
+                      "id": "ac-N9ojs8LtpI4",
+                      "text": "Restriction lifts",
+                      "given": null,
+                      "when": "7 days have passed",
+                      "then": "Rider can be Confirmed again",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-0S3Ms_MrIf0",
+                    "task-_EgPLGFv03o"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "needs a look",
+                  "confidence_note": "Assumed the 7 days start at the third no-show and existing bookings are unaffected.",
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        }
+      ],
+      "status": "approved",
+      "included": true,
+      "confidence": "confident",
+      "confidence_note": null,
+      "confidence_options": []
+    },
+    {
+      "id": "epic-MZ06anVYVuM",
+      "project_id": "proj-b0a8iYLpYQk",
+      "title": "Dispatcher Operations",
+      "description": "Dispatcher cancels a departure and riders are notified.",
+      "user_stories": [
+        {
+          "id": "story-K5PixZ5p6h4",
+          "epic_id": "epic-MZ06anVYVuM",
+          "code_number": 9,
+          "title": "Cancel a shuttle run",
+          "narrative": "As a dispatcher, I want to cancel a departure, so that riders are informed and bookings cleared",
+          "specs": [
+            {
+              "id": "spec-g86Es_PfrvM",
+              "story_id": "story-K5PixZ5p6h4",
+              "title": "Departure cancellation",
+              "description": "Cancel departure, cancel all bookings and notify riders.",
+              "tasks": [
+                {
+                  "id": "task-TDEwgrwopME",
+                  "spec_id": "spec-g86Es_PfrvM",
+                  "title": "Cancel departure",
+                  "description": "Cancel departure, cancel all confirmed and waitlisted bookings, notify each rider.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-xYWaDVmvaPY",
+                      "text": "All riders notified",
+                      "given": null,
+                      "when": "Dispatcher cancels a departure",
+                      "then": "All confirmed and waitlisted bookings are cancelled and each rider is notified",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-C46UInrJlEw",
+                    "task-_EgPLGFv03o"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-Xnc0f1xlQrA",
+                  "spec_id": "spec-g86Es_PfrvM",
+                  "title": "Dispatcher trips view",
+                  "description": "Dispatcher-role view within the mobile app to view all trips and trigger cancellation.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-J7nYmg6xXys",
+                      "text": "View and cancel",
+                      "given": "User is signed in to the mobile app with the dispatcher role",
+                      "when": "Dispatcher opens the trips view",
+                      "then": "All trips are listed and a run can be cancelled; users without the dispatcher role cannot access the view",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-TDEwgrwopME"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        }
+      ],
+      "status": "approved",
+      "included": true,
+      "confidence": "confident",
+      "confidence_note": null,
+      "confidence_options": []
+    },
+    {
+      "id": "epic-Vv8PACo8kgE",
+      "project_id": "proj-b0a8iYLpYQk",
+      "title": "Platform and Resilience",
+      "description": "Non-functional requirements: platform support and offline behavior.",
+      "user_stories": [
+        {
+          "id": "story-g9ebs254P1w",
+          "epic_id": "epic-Vv8PACo8kgE",
+          "code_number": 10,
+          "title": "Use the app offline",
+          "narrative": "As a rider, I want to see my last known booking state offline, so that I still know my seat status",
+          "specs": [
+            {
+              "id": "spec-f0MEFnMoE48",
+              "story_id": "story-g9ebs254P1w",
+              "title": "Offline cache and platform support",
+              "description": "Cache booking state locally with stale marker; support Android 10+ and iOS 15+.",
+              "tasks": [
+                {
+                  "id": "task-VMS2aiYMjrA",
+                  "spec_id": "spec-f0MEFnMoE48",
+                  "title": "Offline booking state cache",
+                  "description": "Persist last known booking state and show a stale marker when offline.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-MbZ7lZlpUJc",
+                      "text": "Stale state shown",
+                      "given": null,
+                      "when": "Device is offline",
+                      "then": "Last known booking state is shown with a stale marker",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [
+                    "task-2SPD3Pv36ls"
+                  ],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                },
+                {
+                  "id": "task-b6tIiT19_U4",
+                  "spec_id": "spec-f0MEFnMoE48",
+                  "title": "Platform compatibility",
+                  "description": "Build and verify on Android 10+ and iOS 15+.",
+                  "acceptance_criteria": [
+                    {
+                      "id": "ac-3-4HN1fqzfc",
+                      "text": "Runs on minimum OS",
+                      "given": null,
+                      "when": "App is installed on Android 10 and iOS 15",
+                      "then": "Booking and tracking flows work",
+                      "met": false
+                    }
+                  ],
+                  "depends_on": [],
+                  "code_refs": [],
+                  "estimate": null,
+                  "status": "approved",
+                  "included": true,
+                  "confidence": "confident",
+                  "confidence_note": null,
+                  "confidence_options": []
+                }
+              ],
+              "status": "approved",
+              "included": true,
+              "confidence": "confident",
+              "confidence_note": null,
+              "confidence_options": []
+            }
+          ],
+          "status": "approved",
+          "included": true,
+          "confidence": "confident",
+          "confidence_note": null,
+          "confidence_options": []
+        }
+      ],
+      "status": "approved",
+      "included": true,
+      "confidence": "confident",
+      "confidence_note": null,
+      "confidence_options": []
+    }
+  ],
+  "generation_error": null,
+  "status": "approved",
+  "owner_user_id": "89d9bdbf-4bec-4f05-bd29-5cf7ee6b8fca",
+  "config_id": "spec-engineer",
+  "git_binding": null,
+  "build_spec_revision": null,
+  "build_code_commit_sha": null,
+  "repo_url": null,
+  "build_session_id": null,
+  "approved_by": "organiser@indnord.com",
+  "approved_at": "2026-11-11T07:53:16.821977Z",
+  "test_runs": [],
+  "review_runs": [],
+  "revision": 10,
+  "created_at": "2026-10-28T21:04:22.656456Z",
+  "updated_at": "2026-11-11T08:39:31.710400Z"
+}
