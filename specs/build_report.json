@@ -1,0 +1,5 @@
+{"tasks": [
+  {"id": "task-J685C8F43p0", "status": "done", "files": ["app/__init__.py", "app/config.py", "app/db.py", "app/seed.py", "app/repository.py", "tests/__init__.py", "tests/test_model_seed.py"]},
+  {"id": "task-hqaGeE8MFuI", "status": "done", "files": ["app/main.py", "app/schemas.py", "requirements.txt", "tests/test_departures_api.py"]},
+  {"id": "task-iJKwBNilIIc", "status": "reassigned", "files": [], "note": "Mobile UI screen; reassigned to a mobile/frontend engineer per manager decision. Consumes GET /api/v1/departures/today."}
+]}
